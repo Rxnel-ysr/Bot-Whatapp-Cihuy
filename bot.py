@@ -1,30 +1,4 @@
 #!/usr/bin/env python3
-"""
-whatsapp_bot.py — Bridges the Lalaa agent (arch_agent.py) to WhatsApp via neonize.
-
-A message you send yourself, in the admin chat, starting with ".ai" is handed
-to the local model; its reply (and any tool calls) come back in the same chat.
-
-Security model:
-  - Only messages that are BOTH sent from your own account (isFromMe) AND in
-    the chat with ADMIN_NUMBER are ever processed — anyone else's messages,
-    or messages in other chats/groups, are ignored outright.
-  - Destructive shell commands (rm, dd, systemctl stop, …) are never
-    auto-confirmed. arch_agent's original confirmation uses input(), which
-    has no meaning over a chat transport, so it's replaced here with a
-    ".yes" / ".no" round-trip that times out after CONFIRM_TIMEOUT seconds.
-  - Each chat gets its own OllamaModel/history so conversations don't bleed
-    into one another, and each chat's processing is serialized with a lock
-    so two fast messages can't race on the same history.
-
-Run:
-  ADMIN_NUMBER=6281330713691 python whatsapp_bot.py
-
-Note: this gives whoever controls that WhatsApp account full command
-execution on this machine. If that account/session is ever compromised
-(linked-device hijack, SIM swap, etc.) so is this machine — treat the
-session file with the same care as an SSH key.
-"""
 
 from __future__ import annotations
 
@@ -54,8 +28,8 @@ from arch_agent import (
 ALLOWED_GROUP = [
     '120363425335904709'
 ]
-ADMIN_NUMBER    = os.environ.get("ADMIN_NUMBER", "6285258022033")
-ADMIN_JID    = os.environ.get("ADMIN_JID", "140682324901995")
+ADMIN_NUMBER    = os.environ.get("ADMIN_NUMBER", "")
+ADMIN_JID    = os.environ.get("ADMIN_JID", "")
 BOT_SESSION     = os.environ.get("BOT_SESSION", "test-bot")
 CMD_PREFIX      = os.environ.get("BOT_PREFIX", ".ai")
 CONFIRM_TIMEOUT = int(os.environ.get("BOT_CONFIRM_TIMEOUT", "60"))
@@ -140,7 +114,7 @@ def _dispatch_tool(chat_id: str, session: ChatSession, tool: str, args: dict) ->
             session.pending_since = time.monotonic()
             _reply(
                 chat_id,
-                f"⚠️ Destructive command needs confirmation:\n{cmd_str}\n"
+                f"Destructive command needs confirmation:\n{cmd_str}\n"
                 f"Reply .yes or .no within {CONFIRM_TIMEOUT}s.",
             )
             return "[PENDING_CONFIRMATION] Waiting for the user to reply .yes or .no in chat."
@@ -222,7 +196,7 @@ def _expire_pending_loop() -> None:
             items = list(sessions.items())
         for chat_id, session in items:
             if session.pending_command and now - session.pending_since > CONFIRM_TIMEOUT:
-                _reply(chat_id, "⌛ Confirmation timed out — skipping the pending command.")
+                _reply(chat_id, "Confirmation timed out — skipping the pending command.")
                 threading.Thread(target=_resume_pending, args=(chat_id, session, False), daemon=True).start()
 
 
